@@ -72,6 +72,27 @@
             color: #4b5563; /* gray-600 */
             padding-left: 1rem;
         }
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
@@ -220,6 +241,41 @@
         </div>
     </main>
 
+    <!-- Error Modal -->
+    <div id="error-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold text-red-600 mb-4">API Key Blocked (Error 403) - Project Setup Required</h2>
+            <div id="modal-error-content" class="text-gray-700 space-y-4 text-left">
+                <p>This is a <strong class="underline">Google Cloud configuration issue</strong>, not an app error. Even with the API enabled, it will be blocked until your project is fully set up.</p>
+                <p class="font-bold text-center text-lg my-2">The most common reason is a missing Billing Account.</p>
+                <div class="border-t border-b border-gray-200 py-4">
+                    <p class="font-bold mb-2">Please do the following in Google Cloud:</p>
+                    <ol class="list-decimal list-inside space-y-3">
+                        <li>
+                            <strong>Link a Billing Account to your project.</strong>
+                            <p class="text-sm text-gray-600 ml-2">This is required by Google to use any API, even the free parts. You will not be charged unless you exceed the free tier.</p>
+                        </li>
+                        <li>
+                            <strong>Confirm the "Generative Language API" is enabled.</strong>
+                            <p class="text-sm text-gray-600 ml-2">You have done this, but it's good to double-check.</p>
+                        </li>
+                    </ol>
+                </div>
+                 <div class="grid grid-cols-1 gap-4 mt-4">
+                    <a href="https://console.cloud.google.com/billing" target="_blank" class="inline-block w-full text-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors text-lg">
+                        Step 1: Go to Google Cloud Billing
+                    </a>
+                     <a href="https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com" target="_blank" class="inline-block w-full text-center bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors">
+                        Step 2: Check API Status
+                    </a>
+                </div>
+                <p class="text-sm text-gray-500 text-center mt-4">After you have linked billing, please wait 5-10 minutes, then refresh the app and try again.</p>
+            </div>
+            <button id="close-modal-btn" class="mt-6 w-full bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">I Understand</button>
+        </div>
+    </div>
+
+
     <script>
         // DOM Elements
         const ucPaymentInput = document.getElementById('uc-payment');
@@ -239,6 +295,10 @@
         const apiKeyInput = document.getElementById('api-key-input');
         const saveApiKeyBtn = document.getElementById('save-api-key-btn');
         
+        // Modal Elements
+        const errorModal = document.getElementById('error-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
         // Gemini Feature DOM Elements
         const userSkillsInput = document.getElementById('user-skills');
         const getJobIdeasBtn = document.getElementById('get-job-ideas');
@@ -289,42 +349,70 @@
             resultElement.innerHTML = '';
             
             const apiKey = getApiKey();
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
-            try {
-                 const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+            const MAX_RETRIES = 4; // Increased retries
+            let attempt = 0;
+            let lastError = null;
 
-                if (!response.ok) {
-                    if(response.status === 400) {
-                        resultElement.innerHTML = `<p class="text-red-500 text-center">Invalid API Key. Please check your key and try again.</p>`;
-                        localStorage.removeItem('geminiApiKey');
-                        checkApiKey();
-                        return null;
+            while (attempt < MAX_RETRIES) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        lastError = { status: response.status };
+                        if (response.status === 503 && attempt < MAX_RETRIES - 1) {
+                            const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                            console.log(`Service unavailable (503). Retrying in ${delay.toFixed(0)}ms...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            attempt++;
+                            continue;
+                        }
+                        throw new Error(`API request failed with status ${response.status}`);
                     }
-                    throw new Error(`API request failed with status ${response.status}`);
-                }
 
-                const result = await response.json();
-                
-                if (result.candidates && result.candidates.length > 0 &&
-                    result.candidates[0].content && result.candidates[0].content.parts &&
-                    result.candidates[0].content.parts.length > 0) {
-                    return result.candidates[0].content.parts[0].text;
-                } else {
-                    throw new Error("No content received from API.");
-                }
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        loaderElement.style.display = 'none';
+                        return result.candidates[0].content.parts[0].text;
+                    } else {
+                        if (result.candidates && result.candidates.length > 0 && result.candidates[0].finishReason === 'SAFETY') {
+                             throw new Error("Content blocked due to safety settings.");
+                        }
+                        throw new Error("No content received from API.");
+                    }
 
-            } catch (error) {
-                console.error("Gemini API Error:", error);
-                resultElement.innerHTML = `<p class="text-red-500 text-center">Sorry, we couldn't fetch suggestions at this time. Please try again later.</p>`;
-                return null;
-            } finally {
-                loaderElement.style.display = 'none';
+                } catch (error) {
+                    lastError = error;
+                    // For network errors etc, break the loop immediately.
+                    if (!error.message.includes("status")) {
+                        break;
+                    }
+                }
             }
+            
+            // Handle final error state after retries
+            loaderElement.style.display = 'none';
+            console.error("Gemini API Error after all retries:", lastError);
+            if (lastError?.message?.includes("403")) {
+                errorModal.classList.remove('hidden');
+            } else if (lastError?.message?.includes("404")) {
+                resultElement.innerHTML = `<p class="text-red-500 text-center">API Error (404): The requested AI model was not found. The model name may be incorrect or unavailable in your region.</p>`;
+            } else if (lastError?.message?.includes("SAFETY")) {
+                resultElement.innerHTML = `<p class="text-red-500 text-center">Your request was blocked for safety reasons. Please modify your input and try again.</p>`;
+            } else if (lastError?.status === 503) {
+                 resultElement.innerHTML = `<p class="text-red-500 text-center">The AI service is still unavailable after several retries (Error 503). Please try again in a few minutes.</p>`;
+            } else {
+                resultElement.innerHTML = `<p class="text-red-500 text-center">An unknown error occurred. Please try again later.</p>`;
+            }
+            return null;
         }
         
         function updateCalculator() {
@@ -366,6 +454,10 @@
                 apiKeyInput.value = '';
                 checkApiKey();
             }
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            errorModal.classList.add('hidden');
         });
 
         getJobIdeasBtn.addEventListener('click', async () => {
@@ -492,4 +584,5 @@
     </script>
 </body>
 </html>
+```
 
