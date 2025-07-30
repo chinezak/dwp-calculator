@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-GB">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -65,7 +65,6 @@
         .gemini-feature .question {
             font-weight: bold;
             color: #1e40af; /* blue-800 */
-            margin-top: 0.75rem;
         }
         .gemini-feature .tip {
             font-style: italic;
@@ -189,13 +188,13 @@
             <div id="job-tools-section" class="hidden space-y-6">
                  <!-- Interview Prep -->
                 <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-                    <label for="job-title-select" class="block text-sm font-medium text-gray-700 mb-2">Select a job to get personalized help:</label>
+                    <label for="job-title-select" class="block text-sm font-medium text-gray-700 mb-2">Select a job to get personalised help:</label>
                     <select id="job-title-select" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-4"></select>
                     <button id="get-interview-questions" class="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2">
                         ✨ Get Interview Questions
                     </button>
                     <div id="interview-questions-loader" class="hidden justify-center mt-4"><div class="loader"></div></div>
-                    <div id="interview-questions-result" class="mt-4 text-gray-700 gemini-feature"></div>
+                    <div id="interview-questions-result" class="mt-4 text-gray-700 gemini-feature space-y-4"></div>
                 </div>
 
                 <!-- CV Helper -->
@@ -207,7 +206,7 @@
                         ✨ Tailor My CV for This Job
                     </button>
                     <div id="cv-help-loader" class="hidden justify-center mt-4"><div class="loader"></div></div>
-                    <div id="cv-help-result" class="mt-4 text-gray-700 gemini-feature"></div>
+                    <div id="cv-help-result" class="mt-4 text-gray-700 gemini-feature space-y-4"></div>
                 </div>
             </div>
 
@@ -467,7 +466,7 @@
                 return;
             }
             const targetEarnings = earningsSlider.value;
-            const prompt = `Based on the skills "${skills}" and a target monthly earning of £${targetEarnings}, suggest 3 specific job roles available in the UK. For each role, provide a brief description and list typical skills required.`;
+            const prompt = `Based on the skills "${skills}" and a target monthly earning of £${targetEarnings}, suggest 3 specific job roles available in the UK. For each role, provide a brief description and list typical skills required. Use British English spelling.`;
             
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -522,17 +521,52 @@
             const selectedJob = jobTitleSelect.value;
             if (!selectedJob) return;
 
-            const prompt = `Generate 5 common interview questions for a "${selectedJob}" role. For each question, provide a brief, helpful tip on how to answer it well.`;
-            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const prompt = `Generate 5 common interview questions for a "${selectedJob}" role. For each question, provide a brief, helpful tip on how to answer it well. Use British English spelling.`;
+            
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            interview_questions: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        question: { type: "STRING" },
+                                        tip: { type: "STRING" }
+                                    },
+                                    required: ["question", "tip"]
+                                }
+                            }
+                        }
+                    }
+                }
+            };
 
-            const textResponse = await callGemini(payload, interviewQuestionsLoader, interviewQuestionsResult);
+            const jsonString = await callGemini(payload, interviewQuestionsLoader, interviewQuestionsResult);
 
-            if(textResponse) {
-                let html = textResponse
-                    .replace(/Question \d: (.*?)\n/g, '<p class="question">$1</p>')
-                    .replace(/Tip: (.*?)\n/g, '<p class="tip">$1</p>')
-                    .replace(/\n/g, '<br>'); 
-                interviewQuestionsResult.innerHTML = html;
+            if (jsonString) {
+                try {
+                    const data = JSON.parse(jsonString);
+                    let html = '';
+                    if (data.interview_questions && data.interview_questions.length > 0) {
+                        html = data.interview_questions.map(item => `
+                            <div class="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                <p class="question">${item.question}</p>
+                                <p class="tip mt-2"><strong>Tip:</strong> ${item.tip}</p>
+                            </div>
+                        `).join('');
+                    } else {
+                        html = '<p class="text-center text-gray-500">No questions were generated.</p>';
+                    }
+                    interviewQuestionsResult.innerHTML = html;
+                } catch (e) {
+                    console.error("Error parsing interview questions JSON:", e);
+                    interviewQuestionsResult.innerHTML = `<p class="text-red-500 text-center">There was an issue processing the interview questions. The raw response was: ${jsonString}</p>`;
+                }
             }
         });
 
@@ -549,23 +583,92 @@
                 return;
             }
 
-            const prompt = `Act as a helpful career coach. A user is applying for a "${selectedJob}" role. Their current CV/experience is:\n\n"${cvText}"\n\nPlease provide constructive feedback on how to tailor this CV for the role. Suggest specific improvements. Structure your response with the following sections, using markdown for formatting:\n**Overall Feedback:**\n**Suggested Personal Summary:**\n**Keywords to Include:**\n**Revised Experience Points:**`;
-            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-            const textResponse = await callGemini(payload, cvHelpLoader, cvHelpResult);
+            const prompt = `Act as a helpful UK-based career coach. A user is applying for a "${selectedJob}" role. Their current CV/experience is:\n\n"${cvText}"\n\nPlease provide constructive feedback on how to tailor this CV for the role. Use British English spelling and grammar. Suggest specific improvements. Ensure every bullet point and sentence you generate starts with a capital letter. Structure your response as a JSON object.`;
             
-            if(textResponse) {
-                let html = textResponse
-                    .replace(/\*\*(.*?)\*\*/g, '<h3>$1</h3>') // Bold to h3
-                    .replace(/\* (.*?)\n/g, '<li>$1</li>') // Star bullet points to li
-                    .replace(/\n/g, '<br/>');
-                cvHelpResult.innerHTML = html;
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            overallFeedback: { type: "STRING" },
+                            suggestedSummary: { 
+                                type: "ARRAY", 
+                                items: { type: "STRING" },
+                                description: "A short, impactful personal summary, broken into a few sentences. Each sentence must start with a capital letter."
+                             },
+                            keywords: { type: "ARRAY", items: { type: "STRING" } },
+                            revisedExperience: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        title: { type: "STRING" },
+                                        points: { 
+                                            type: "ARRAY", 
+                                            items: { type: "STRING" },
+                                            description: "An array of bullet points. Each bullet point must be a full sentence starting with a capital letter."
+                                        }
+                                    },
+                                    required: ["title", "points"]
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            const jsonString = await callGemini(payload, cvHelpLoader, cvHelpResult);
+            
+            if(jsonString) {
+                try {
+                    let sanitizedString = jsonString.trim();
+                    if (sanitizedString.startsWith('```json')) {
+                        sanitizedString = sanitizedString.substring(7).trim();
+                        if (sanitizedString.endsWith('```')) {
+                            sanitizedString = sanitizedString.slice(0, -3).trim();
+                        }
+                    }
+
+                    const data = JSON.parse(sanitizedString);
+                    let html = `
+                        <div class="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-left">
+                            <h3 class="font-bold text-lg mb-2 text-gray-800">Overall Feedback</h3>
+                            <p class="text-gray-600">${data.overallFeedback || 'No overall feedback provided.'}</p>
+                        </div>
+                        <div class="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-left">
+                            <h3 class="font-bold text-lg mb-2 text-gray-800">Suggested Personal Summary</h3>
+                            <div class="space-y-2">
+                                ${(data.suggestedSummary || ['No summary suggested.']).map(s => `<p class="text-gray-600">${s}</p>`).join('')}
+                            </div>
+                        </div>
+                        <div class="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-left">
+                            <h3 class="font-bold text-lg mb-2 text-gray-800">Keywords to Include</h3>
+                            <ul class="list-disc list-inside text-gray-600">${(data.keywords || []).map(k => `<li>${k}</li>`).join('')}</ul>
+                        </div>
+                        <div class="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-left">
+                            <h3 class="font-bold text-lg mb-2 text-gray-800">Revised Experience Points</h3>
+                            ${(data.revisedExperience || []).map(exp => `
+                                <div class="mt-4">
+                                    <h4 class="font-semibold text-gray-700">${exp.title}</h4>
+                                    <ul class="list-disc list-inside text-gray-600 ml-4">${(exp.points || []).map(p => `<li>${p}</li>`).join('')}</ul>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    cvHelpResult.innerHTML = html;
+                } catch(e) {
+                     console.error("Error parsing CV help JSON:", e);
+                    cvHelpResult.innerHTML = `<p class="text-red-500 text-center">There was an issue processing the CV feedback. The AI returned a response that was not structured correctly. Please try again.</p>`;
+                }
             }
         });
 
         getActionPlanBtn.addEventListener('click', async () => {
              const targetEarnings = earningsSlider.value;
              const jobIdeas = jobIdeasResult.innerText;
-             const prompt = `A person wants to earn £${targetEarnings} per month and is considering these job roles:\n${jobIdeas}\nCreate a simple, encouraging 3-step action plan to help them get started. Use a positive and empowering tone. Format each step starting with **Step X:**.`;
+             const prompt = `A person wants to earn £${targetEarnings} per month and is considering these job roles:\n${jobIdeas}\nCreate a simple, encouraging 3-step action plan to help them get started. Use a positive and empowering tone and British English spelling. Format each step starting with **Step X:**.`;
              const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
 
              const textResponse = await callGemini(payload, actionPlanLoader, actionPlanResult);
@@ -584,4 +687,5 @@
     </script>
 </body>
 </html>
+```
 
