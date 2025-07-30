@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DWP Clarity Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom styles for the slider thumb */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #005EA5; /* DWP Blue */
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            background: #005EA5;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        .chart-bar {
+            transition: width 0.3s ease-in-out;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .gemini-feature h3 {
+             font-size: 1.125rem; /* 18px */
+             font-weight: 700;
+             margin-bottom: 0.5rem; /* 8px */
+             color: #111827;
+        }
+         .gemini-feature ul {
+            list-style-type: disc;
+            list-style-position: inside;
+            padding-left: 1rem; /* 16px */
+            margin-bottom: 1rem; /* 16px */
+        }
+        .gemini-feature li {
+             margin-bottom: 0.25rem; /* 4px */
+        }
+        .gemini-feature .question {
+            font-weight: bold;
+            color: #1e40af; /* blue-800 */
+            margin-top: 0.75rem;
+        }
+        .gemini-feature .tip {
+            font-style: italic;
+            color: #4b5563; /* gray-600 */
+            padding-left: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <main class="w-full max-w-2xl bg-white rounded-xl shadow-lg p-6 md:p-10 space-y-8">
+        <!-- Header Section -->
+        <header class="text-center">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-gray-800">The DWP Clarity Calculator</h1>
+            <p class="mt-2 text-lg text-gray-600">See how work pays. Instantly.</p>
+        </header>
+
+        <!-- Input Configuration Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <div>
+                <label for="uc-payment" class="block text-sm font-medium text-gray-700 mb-1">Your monthly Universal Credit payment (£)</label>
+                <input type="number" id="uc-payment" value="1000" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                 <label class="block text-sm font-medium text-gray-700 mb-1">Do you have a Work Allowance? <span id="info-icon" class="text-blue-500 cursor-pointer">(?)</span></label>
+                <select id="work-allowance" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    <option value="0">No, I don't have one</option>
+                    <option value="404">Yes, £404 (no housing costs)</option>
+                    <option value="673">Yes, £673 (with housing costs)</option>
+                </select>
+            </div>
+             <div id="info-popup" class="hidden md:col-span-2 p-4 mt-2 text-sm text-blue-800 bg-blue-100 rounded-lg" role="alert">
+                A Work Allowance is the amount you can earn before your Universal Credit payment is affected. You typically get it if you have children or limited capability for work.
+            </div>
+        </div>
+
+        <!-- Interactive Calculator Section -->
+        <div class="space-y-6">
+            <!-- Total Income Display -->
+            <div class="text-center bg-green-50 border-2 border-dashed border-green-300 rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-green-800">Your Total Estimated Take-Home Income per Month</h2>
+                <p id="total-income" class="text-4xl md:text-5xl font-extrabold text-green-600 mt-2">£1,000.00</p>
+            </div>
+
+            <!-- Visual Bar Chart -->
+            <div>
+                <div id="income-chart" class="w-full h-12 bg-gray-200 rounded-full flex overflow-hidden">
+                    <div id="earnings-bar" class="chart-bar bg-blue-500 flex items-center justify-center text-white font-semibold" style="width: 0%;"></div>
+                    <div id="uc-bar" class="chart-bar bg-sky-300 flex items-center justify-center text-blue-900 font-semibold" style="width: 100%;"></div>
+                </div>
+                <div class="flex justify-between text-sm mt-2 px-1">
+                    <div class="flex items-center">
+                        <span class="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+                        <span id="earnings-legend">Your Earnings: £0</span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="w-3 h-3 bg-sky-300 rounded-full mr-2"></span>
+                        <span id="uc-legend">Universal Credit: £1000</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Income Slider -->
+            <div class="space-y-2">
+                <label for="earnings-slider" class="block text-lg font-medium text-gray-800 text-center">
+                    Monthly Earnings from Work: <span id="slider-value" class="font-bold text-blue-600">£0</span>
+                </label>
+                <input id="earnings-slider" type="range" min="0" max="3000" step="10" value="0" class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+            </div>
+        </div>
+
+        <!-- Gemini AI Features Section -->
+        <div class="pt-8 border-t border-gray-200 space-y-6">
+            <header class="text-center">
+                <h2 class="text-2xl font-bold text-gray-800">Ready for the Next Step?</h2>
+                <p class="mt-1 text-gray-600">Let our AI assistant help you explore your options.</p>
+            </header>
+
+            <!-- Feature 1: Job Ideas -->
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                <label for="user-skills" class="block text-sm font-medium text-gray-700 mb-2">Enter your skills or past jobs (e.g., "customer service, cashier")</label>
+                <input type="text" id="user-skills" placeholder="e.g. retail, driving, admin work" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                <button id="get-job-ideas" class="mt-4 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                    ✨ Find Local Job Ideas
+                </button>
+                <div id="job-ideas-loader" class="hidden justify-center mt-4"><div class="loader"></div></div>
+                <div id="job-ideas-result" class="mt-4 text-gray-700 gemini-feature"></div>
+            </div>
+            
+            <!-- Job Specific Tools Section -->
+            <div id="job-tools-section" class="hidden space-y-6">
+                 <!-- Interview Prep -->
+                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                    <label for="job-title-select" class="block text-sm font-medium text-gray-700 mb-2">Select a job to get personalized help:</label>
+                    <select id="job-title-select" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-4"></select>
+                    <button id="get-interview-questions" class="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2">
+                        ✨ Get Interview Questions
+                    </button>
+                    <div id="interview-questions-loader" class="hidden justify-center mt-4"><div class="loader"></div></div>
+                    <div id="interview-questions-result" class="mt-4 text-gray-700 gemini-feature"></div>
+                </div>
+
+                <!-- CV Helper (NEW) -->
+                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                     <h3 class="text-lg font-bold text-gray-800">CV / Resume Helper</h3>
+                     <label for="cv-input" class="block text-sm font-medium text-gray-700 mb-2">Paste your CV or key work experience points here:</label>
+                     <textarea id="cv-input" rows="6" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. Managed a team of 5 at a retail store..."></textarea>
+                     <button id="get-cv-help" class="mt-4 w-full bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors flex items-center justify-center gap-2">
+                        ✨ Tailor My CV for This Job
+                    </button>
+                    <div id="cv-help-loader" class="hidden justify-center mt-4"><div class="loader"></div></div>
+                    <div id="cv-help-result" class="mt-4 text-gray-700 gemini-feature"></div>
+                </div>
+            </div>
+
+            <!-- Action Plan -->
+             <div id="action-plan-section" class="hidden bg-gray-50 p-6 rounded-lg border border-gray-200">
+                <button id="get-action-plan" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
+                    ✨ Generate a Positive Action Plan
+                </button>
+                 <div id="action-plan-loader" class="hidden justify-center mt-4"><div class="loader"></div></div>
+                <div id="action-plan-result" class="mt-4 text-gray-700 gemini-feature"></div>
+            </div>
+        </div>
+
+        <!-- Pitch Section -->
+        <div class="pt-6 border-t border-gray-200">
+             <h3 class="text-xl font-bold text-center text-gray-800 mb-4">Why is this a Game-Changer?</h3>
+             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                 <div class="bg-gray-50 p-4 rounded-lg">
+                     <h4 class="font-bold text-blue-600">Radical Simplicity</h4>
+                     <p class="text-sm text-gray-600 mt-1">Replaces complex forms with one intuitive slider, providing instant clarity.</p>
+                 </div>
+                 <div class="bg-gray-50 p-4 rounded-lg">
+                     <h4 class="font-bold text-blue-600">Powerful Motivation</h4>
+                     <p class="text-sm text-gray-600 mt-1">Visually proves that work always pays, tackling fear and building confidence.</p>
+                 </div>
+                 <div class="bg-gray-50 p-4 rounded-lg">
+                     <h4 class="font-bold text-blue-600">Holistic Career Support</h4>
+                     <p class="text-sm text-gray-600 mt-1">Offers AI-powered job ideas, interview prep, CV tailoring, and action plans.</p>
+                 </div>
+             </div>
+        </div>
+    </main>
+
+    <script>
+        // DOM Elements
+        const ucPaymentInput = document.getElementById('uc-payment');
+        const workAllowanceSelect = document.getElementById('work-allowance');
+        const earningsSlider = document.getElementById('earnings-slider');
+        const sliderValueDisplay = document.getElementById('slider-value');
+        const totalIncomeDisplay = document.getElementById('total-income');
+        const earningsBar = document.getElementById('earnings-bar');
+        const ucBar = document.getElementById('uc-bar');
+        const earningsLegend = document.getElementById('earnings-legend');
+        const ucLegend = document.getElementById('uc-legend');
+        const infoIcon = document.getElementById('info-icon');
+        const infoPopup = document.getElementById('info-popup');
+        
+        // Gemini Feature DOM Elements
+        const userSkillsInput = document.getElementById('user-skills');
+        const getJobIdeasBtn = document.getElementById('get-job-ideas');
+        const jobIdeasLoader = document.getElementById('job-ideas-loader');
+        const jobIdeasResult = document.getElementById('job-ideas-result');
+        
+        const jobToolsSection = document.getElementById('job-tools-section');
+        const jobTitleSelect = document.getElementById('job-title-select');
+        
+        const getInterviewQuestionsBtn = document.getElementById('get-interview-questions');
+        const interviewQuestionsLoader = document.getElementById('interview-questions-loader');
+        const interviewQuestionsResult = document.getElementById('interview-questions-result');
+
+        const cvInput = document.getElementById('cv-input');
+        const getCvHelpBtn = document.getElementById('get-cv-help');
+        const cvHelpLoader = document.getElementById('cv-help-loader');
+        const cvHelpResult = document.getElementById('cv-help-result');
+
+        const actionPlanSection = document.getElementById('action-plan-section');
+        const getActionPlanBtn = document.getElementById('get-action-plan');
+        const actionPlanLoader = document.getElementById('action-plan-loader');
+        const actionPlanResult = document.getElementById('action-plan-result');
+
+        // Universal Credit Taper Rate (currently 55%)
+        const TAPER_RATE = 0.55;
+
+        // Function to format numbers as currency
+        const formatCurrency = (amount) => `£${amount.toFixed(2)}`;
+        
+        // --- Gemini API Call Function ---
+        async function callGemini(payload, loaderElement, resultElement) {
+            loaderElement.style.display = 'flex';
+            resultElement.innerHTML = '';
+            
+            const apiKey = ""; // API key is handled by the environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                 const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    return result.candidates[0].content.parts[0].text;
+                } else {
+                    throw new Error("No content received from API.");
+                }
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                resultElement.innerHTML = `<p class="text-red-500 text-center">Sorry, we couldn't fetch suggestions at this time. Please try again later.</p>`;
+                return null;
+            } finally {
+                loaderElement.style.display = 'none';
+            }
+        }
+        
+        // Main calculation function
+        function updateCalculator() {
+            // ... (rest of the calculator logic is unchanged) ...
+            const initialUcPayment = parseFloat(ucPaymentInput.value) || 0;
+            const workAllowance = parseFloat(workAllowanceSelect.value) || 0;
+            const earnings = parseFloat(earningsSlider.value) || 0;
+            const earningsAboveAllowance = Math.max(0, earnings - workAllowance);
+            const ucReduction = earningsAboveAllowance * TAPER_RATE;
+            const adjustedUcPayment = Math.max(0, initialUcPayment - ucReduction);
+            const totalTakeHomeIncome = earnings + adjustedUcPayment;
+            sliderValueDisplay.textContent = `£${earnings}`;
+            totalIncomeDisplay.textContent = formatCurrency(totalTakeHomeIncome);
+            earningsLegend.textContent = `Your Earnings: £${earnings}`;
+            ucLegend.textContent = `Universal Credit: £${adjustedUcPayment.toFixed(0)}`;
+            if (totalTakeHomeIncome > 0) {
+                const earningsPercentage = (earnings / totalTakeHomeIncome) * 100;
+                const ucPercentage = (adjustedUcPayment / totalTakeHomeIncome) * 100;
+                earningsBar.style.width = `${earningsPercentage}%`;
+                ucBar.style.width = `${ucPercentage}%`;
+            } else {
+                earningsBar.style.width = '0%';
+                ucBar.style.width = '100%';
+            }
+        }
+
+        // --- Event Listeners ---
+        ucPaymentInput.addEventListener('input', updateCalculator);
+        workAllowanceSelect.addEventListener('change', updateCalculator);
+        earningsSlider.addEventListener('input', updateCalculator);
+        
+        infoIcon.addEventListener('click', () => {
+            infoPopup.classList.toggle('hidden');
+        });
+
+        getJobIdeasBtn.addEventListener('click', async () => {
+            const skills = userSkillsInput.value.trim();
+            if (!skills) {
+                jobIdeasResult.innerHTML = '<p class="text-red-500 text-center">Please enter your skills or past jobs first.</p>';
+                return;
+            }
+            const targetEarnings = earningsSlider.value;
+            const prompt = `Based on the skills "${skills}" and a target monthly earning of £${targetEarnings}, suggest 3 specific job roles available in the UK. For each role, provide a brief description and list typical skills required.`;
+            
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            jobs: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        job_title: { type: "STRING" },
+                                        description: { type: "STRING" },
+                                        skills: { type: "ARRAY", items: { type: "STRING" } }
+                                    },
+                                    required: ["job_title", "description", "skills"]
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            const jsonString = await callGemini(payload, jobIdeasLoader, jobIdeasResult);
+
+            if (jsonString) {
+                try {
+                    const data = JSON.parse(jsonString);
+                    let html = '';
+                    jobTitleSelect.innerHTML = ''; // Clear previous options
+                    data.jobs.forEach(job => {
+                        html += `<h3>${job.job_title}</h3><p>${job.description}</p><ul>${job.skills.map(s => `<li>${s}</li>`).join('')}</ul>`;
+                        const option = document.createElement('option');
+                        option.value = job.job_title;
+                        option.textContent = job.job_title;
+                        jobTitleSelect.appendChild(option);
+                    });
+                    jobIdeasResult.innerHTML = html;
+                    
+                    jobToolsSection.classList.remove('hidden');
+                    actionPlanSection.classList.remove('hidden');
+                } catch(e) {
+                    console.error("Error parsing JSON response:", e);
+                    jobIdeasResult.innerHTML = `<p class="text-red-500 text-center">There was an issue processing the job ideas. The response was: ${jsonString}</p>`;
+                }
+            }
+        });
+
+        getInterviewQuestionsBtn.addEventListener('click', async () => {
+            const selectedJob = jobTitleSelect.value;
+            if (!selectedJob) return;
+
+            const prompt = `Generate 5 common interview questions for a "${selectedJob}" role. For each question, provide a brief, helpful tip on how to answer it well.`;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+
+            const textResponse = await callGemini(payload, interviewQuestionsLoader, interviewQuestionsResult);
+
+            if(textResponse) {
+                let html = textResponse
+                    .replace(/Question \d: (.*?)\n/g, '<p class="question">$1</p>')
+                    .replace(/Tip: (.*?)\n/g, '<p class="tip">$1</p>')
+                    .replace(/\n/g, '<br>'); 
+                interviewQuestionsResult.innerHTML = html;
+            }
+        });
+
+        getCvHelpBtn.addEventListener('click', async () => {
+            const selectedJob = jobTitleSelect.value;
+            const cvText = cvInput.value.trim();
+
+            if(!selectedJob) {
+                cvHelpResult.innerHTML = `<p class="text-red-500 text-center">Please select a job first.</p>`;
+                return;
+            }
+            if(!cvText) {
+                cvHelpResult.innerHTML = `<p class="text-red-500 text-center">Please paste your CV or work experience first.</p>`;
+                return;
+            }
+
+            const prompt = `Act as a helpful career coach. A user is applying for a "${selectedJob}" role. Their current CV/experience is:\n\n"${cvText}"\n\nPlease provide constructive feedback on how to tailor this CV for the role. Suggest specific improvements. Structure your response with the following sections, using markdown for formatting:\n**Overall Feedback:**\n**Suggested Personal Summary:**\n**Keywords to Include:**\n**Revised Experience Points:**`;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const textResponse = await callGemini(payload, cvHelpLoader, cvHelpResult);
+            
+            if(textResponse) {
+                let html = textResponse
+                    .replace(/\*\*(.*?)\*\*/g, '<h3>$1</h3>') // Bold to h3
+                    .replace(/\* (.*?)\n/g, '<li>$1</li>') // Star bullet points to li
+                    .replace(/\n/g, '<br/>');
+                cvHelpResult.innerHTML = html;
+            }
+        });
+
+        getActionPlanBtn.addEventListener('click', async () => {
+             const targetEarnings = earningsSlider.value;
+             const jobIdeas = jobIdeasResult.innerText;
+             const prompt = `A person wants to earn £${targetEarnings} per month and is considering these job roles:\n${jobIdeas}\nCreate a simple, encouraging 3-step action plan to help them get started. Use a positive and empowering tone. Format each step starting with **Step X:**.`;
+             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+
+             const textResponse = await callGemini(payload, actionPlanLoader, actionPlanResult);
+
+             if(textResponse) {
+                let html = textResponse.replace(/\*\*(.*?)\*\*/g, '<h3>$1</h3>').replace(/\n/g, '<br/>');
+                actionPlanResult.innerHTML = html;
+             }
+        });
+
+        // Initial calculation on page load
+        window.addEventListener('load', updateCalculator);
+    </script>
+</body>
+</html>
+
